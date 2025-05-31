@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-
+import * as fs from 'fs'; //read-write files
+import * as path from 'path'; //construct file paths
 
 type Note = {
     uri: string;
@@ -7,61 +8,104 @@ type Note = {
     content: string;
 };
 
-const notes: Note[] = [];
+let noteDecorationType: vscode.TextEditorDecorationType | null = null;
+
+const NOTES_FILE = '.vscode/sidenote.notes.json'; //notes location in the project folder
+
+function loadNotes() {
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; //find root folder in the project
+    if (!folder) return;
+
+    const filePath = path.join(folder, NOTES_FILE); //constract full path to notes 
+
+    if (fs.existsSync(filePath)) { //if file exists
+        const raw = fs.readFileSync(filePath, 'utf-8'); //read it
+        try {
+            notes = JSON.parse(raw); //parse to JSON and save
+        } catch {
+            notes = [];
+        }
+    }
+}
+
+function saveNotes() {
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; //find root folder
+    if (!folder) return;
+
+    const filePath = path.join(folder, NOTES_FILE); //constract fuul path
+
+    const json = JSON.stringify(notes, null, 2); //convert notes array to JSON
+    fs.mkdirSync(path.dirname(filePath), { recursive: true }); //ensure directory exists
+    fs.writeFileSync(filePath, json, 'utf-8'); //save
+}
+
+let notes: Note[] = [];
 
 export function registerNoteCommand(context: vscode.ExtensionContext) {
-    console.log('✅ notes feature loaded');
+    loadNotes();
 
-    const addNoteCommand = vscode.commands.registerCommand('sidenote.addNote', async () => {
+    const addNoteCommand = vscode.commands.registerCommand('sidenote.addNote', async () => { //defining the addNote command
         const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage('No active editor found.');
-            return;
-        }
+        if (!editor) return;
 
         const document = editor.document;
         const uri = document.uri.toString();
         const line = editor.selection.active.line;
 
-        const existing = notes.find(n => n.uri === uri && n.line === line);
-        const placeholder = existing ? existing.content : 'Add a note for this line';
-
-        const input = await vscode.window.showInputBox({
+        const existing = notes.find(n => n.uri === uri && n.line === line); //existing note- if exists
+        const input = await vscode.window.showInputBox({ //if existing- add existing, else- wait for user's note.
             prompt: `Enter a note for line ${line + 1}`,
-            value: placeholder,
+            value: existing?.content ?? '',
         });
 
         if (!input) return;
 
-        // Remove existing note if any, and add new one
-        const index = notes.findIndex(n => n.uri === uri && n.line === line);
-        if (index !== -1) notes.splice(index, 1);
+        // Remove old note
+        notes = notes.filter(n => !(n.uri === uri && n.line === line)); //replace old note if exists.
         notes.push({ uri, line, content: input });
 
+        saveNotes(); // 👈 Save to file
         applyNoteDecorations(editor);
+        
     });
 
     context.subscriptions.push(addNoteCommand);
+
+    const editorChangeListener = vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (editor) {
+            applyNoteDecorations(editor);
+        }
+    });
+    context.subscriptions.push(editorChangeListener);
 }
 
-function applyNoteDecorations(editor: vscode.TextEditor) {
-    const uri = editor.document.uri.toString();
+export function applyNoteDecorations(editor: vscode.TextEditor) {
+    const fileUri = editor.document.uri.toString();
+    const fileNotes = notes.filter(n => n.uri === fileUri);
 
-    const decorations: vscode.DecorationOptions[] = notes
-        .filter(n => n.uri === uri)
-        .map(n => ({
-            range: new vscode.Range(n.line, 0, n.line, 0),
-            hoverMessage: `💬 ${n.content}`,
-        }));
+    // Clear previous decoration type if it exists
+    if (noteDecorationType) {
+        noteDecorationType.dispose();
+    }
 
-    const decorationType = vscode.window.createTextEditorDecorationType({
-        isWholeLine: true,
+    // Create a new decoration type (💬 icon)
+    noteDecorationType = vscode.window.createTextEditorDecorationType({
+        isWholeLine: false,
         after: {
-            contentText: ' 💬',
+            contentText: '💬',
             margin: '0 0 0 1rem',
-            color: '#999',
-        },
+        }
     });
 
-    editor.setDecorations(decorationType, decorations);
+    const decorations = fileNotes.map(n => ({
+        range: new vscode.Range(
+            n.line,
+            editor.document.lineAt(n.line).range.end.character,
+            n.line,
+            editor.document.lineAt(n.line).range.end.character
+        ),
+        hoverMessage: n.content
+    }));
+
+    editor.setDecorations(noteDecorationType, decorations);
 }
