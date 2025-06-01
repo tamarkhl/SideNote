@@ -18,8 +18,16 @@
         "title": "Highlight selected text"
       },
       {
+        "command": "sidenote.deleteHighlight",
+        "title": "Remove highlight"
+      },
+      {
         "command": "sidenote.addNote",
         "title": "Add Note to Line"
+      },
+      {
+        "command": "sidenote.deleteNote",
+        "title": "Delete note on line"
       }
     ]
   },

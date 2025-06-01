@@ -109,3 +109,36 @@ export function applyNoteDecorations(editor: vscode.TextEditor) {
 
     editor.setDecorations(noteDecorationType, decorations);
 }
+
+export function registerDeleteNoteCommand(context: vscode.ExtensionContext) {
+    const deleteNoteCommand = vscode.commands.registerCommand('sidenote.deleteNote', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage('No active editor.');
+            return;
+        }
+
+        const fileUri = editor.document.uri.toString();
+        const line = editor.selection.active.line;
+
+        const index = notes.findIndex(n => n.uri === fileUri && n.line === line);
+        if (index === -1) {
+            vscode.window.showInformationMessage('No note found on this line.');
+            return;
+        }
+
+        const confirm = await vscode.window.showQuickPick(['Yes', 'No'], {
+            placeHolder: `Delete note on line ${line + 1}?`
+        });
+
+        if (confirm !== 'Yes') return;
+
+        notes.splice(index, 1);
+        await saveNotes();
+
+        applyNoteDecorations(editor);
+        vscode.window.setStatusBarMessage('🗑 Note deleted', 2000);
+    });
+
+    context.subscriptions.push(deleteNoteCommand);
+}

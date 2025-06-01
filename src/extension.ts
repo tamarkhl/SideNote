@@ -1,12 +1,16 @@
 import * as vscode from 'vscode';
 import { registerHighlightCommand } from './features/highlight';
+import { registerDeleteHighlightCommand } from './features/highlight';
 import { registerNoteCommand } from './features/notes';
+import { registerDeleteNoteCommand } from './features/notes';
 
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('✅ SideNote extension activated');
     registerHighlightCommand(context);
     registerNoteCommand(context);
+    registerDeleteNoteCommand(context);
+    registerDeleteHighlightCommand(context);
 }
 
 export function deactivate() {}
